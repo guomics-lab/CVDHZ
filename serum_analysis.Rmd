@@ -1,0 +1,627 @@
+---
+title: "Untitled"
+author: "huanglingling"
+date: "2021/8/19"
+output: html_document
+detail: 重新作batchfree
+---
+
+原始矩阵再次作矫正，按照每个batch都作矫正（原来是按照2种不同实验方法），重新分析。。。
+```{r}
+rm(list = ls())
+library(ggplot2)
+library(ggpubr)
+library(plyr)
+library(reshape2)
+library(ggpubr)
+library(readxl)
+library(stringr)
+library(pheatmap)
+library(RColorBrewer)
+library(stringr)
+library(RColorBrewer)
+library(Mfuzz)
+
+options(stringsAsFactors = F)
+source("D:/proteomics_library_linda.R")
+source("D:/NA_deal.R")
+
+info_all <- read_excel("../CVD_163_new_total.xlsx",sheet = 1)
+info_didu <- info_all[,c("number","57d-antiboby","28d-antiboby")]
+
+info_Serumsample <- read_excel("../CVDHZ_serum_MS_info0722.xlsx")
+
+info_Serumsample$`28d-antiboby` <- ifelse(info_Serumsample$Patient_time=="B",info_didu$`28d-antiboby`[match(info_Serumsample$Patient_number,info_didu$number)],NA)
+info_Serumsample$`57d-antiboby` <- ifelse(info_Serumsample$Patient_time=="C",info_didu$`57d-antiboby`[match(info_Serumsample$Patient_number,info_didu$number)],NA)
+
+table(info_Serumsample$`28d-antiboby` ) #131:32
+table(info_Serumsample$`57d-antiboby` ) #19:144
+
+# df_serum  <- read.csv("../../20210803CVDHZ_protmatrix_serum_ratio.csv",row.names = 1)
+#  df_serum  <-  df_serum[apply(df_serum,1, function(x) sum(!is.na(x))>0),]
+# NA_threshold_table(df_serum) #1563"      "55.03%";"1046"      "35.19%"
+
+df_serum <- read.csv("./BatchFree2021-08-181_na.csv.csv",row.names = 1)
+genelist <- read.table("./genelist.txt",header = T,sep = "\t")
+gene=genelist$ID
+row.names(df_serum)=lapply(gene, function(x) {str_split(x,";")[[1]][1]})
+
+#删除NA率高于90%的蛋白
+df_serum <- df_serum[apply(df_serum, 1, function(x) {(sum(is.na(x))/length(x)) <0.9}),]
+NA_threshold_table(df_serum)
+write.csv(df_serum,"df_serum0.9.csv")
+
+df_PBMCS <- read.csv("../df_PBMCS0.9.csv",row.names = 1)
+
+length(intersect(row.names(df_serum),row.names(df_PBMCS))) #665
+write.csv(intersect(row.names(df_serum),row.names(df_PBMCS)),"overallprotein.csv")
+#outlier 值处理
+df2.matrix <- as.matrix(df_serum)
+    outline1 <- (fivenum(df2.matrix)[4]-fivenum(df2.matrix)[2])*2+fivenum(df2.matrix)[4]
+    outline2 <- fivenum(df2.matrix)[2]-(fivenum(df2.matrix)[4]-fivenum(df2.matrix)[2])*2
+    df2.matrix[df2.matrix>outline1] <- outline1
+    df2.matrix[df2.matrix<outline2] <- outline2
+    
+df_serum2 <- as.data.frame(df2.matrix) #log2(rario)<0
+```
+
+
+```{r 按病人分3类：2个time均免疫，有且仅有一个time免疫，两次都不免疫}
+sb=data.frame(Patient_number=info_Serumsample$Patient_number,didu=apply(info_Serumsample[,c("28d-antiboby","57d-antiboby")], 1, sum,na.rm=T))
+sb2= aggregate(sb[,-c(1)],by = list(sb$Patient_number),sum,na.rm=T)
+
+info_Serumsample$group= NA
+#info_Serumsample$group[match(group0Sample,info_Serumsample$MS_ID)]="group0"
+info_Serumsample$group[info_Serumsample$Patient_number%in%sb2$Group.1[sb2$x==0]]="group0"
+info_Serumsample$group[info_Serumsample$Patient_number%in%sb2$Group.1[sb2$x==2]]="group2"
+info_Serumsample$group[info_Serumsample$Patient_number%in%sb2$Group.1[sb2$x==1]]="group1"
+
+# info_Serumsample$group[info_Serumsample$Patient_number==136]=NA #删28d==1,57d=0的136号样本
+# info_Serumsample$MS_ID[info_Serumsample$Patient_number==136]
+# info_Serumsample$MS_ID[grep("136",info_Serumsample$Patient_number)] #"S18_4" "S18_5" "S18_6"
+# info_Serumsample2 = info_Serumsample[-grep("136",info_Serumsample$Patient_number),]#删28d==1,57d=0的136号样本
+
+info_Serumsample2<-info_Serumsample
+# write.csv(info_Serumsample2,"info_Serumsample2.csv")
+df_serum3=df_serum2[,!names(df_serum2)%in%c("S18_4","S18_5","S18_6")]
+
+df_serum31=df_serum3[,na.omit(info_Serumsample2$MS_ID[info_Serumsample2$Patient_time=="A"])] #没考虑3个rep样本
+NA_threshold_table(df_serum31)
+df_serum32=df_serum3[,na.omit(info_Serumsample2$MS_ID[info_Serumsample2$Patient_time=="B"])]
+df_serum33=df_serum3[,na.omit(info_Serumsample2$MS_ID[info_Serumsample2$Patient_time=="C"])]
+
+write.csv(info_Serumsample,"info_Serumsample.csv",row.names = F)
+# write.csv(info_Serumsample2,"info_Serumsample2.csv",row.names = F)
+write.csv(df_serum3,"df_serum3.csv")
+
+# info_Serumsample2 <- read.csv(".//info_Serumsample2.csv")
+# df_serum3 <- read.csv(".//df_serum3.csv",row.names = 1)
+
+```
+
+
+```{r 0d的三类病人样本两两比较}
+group=info_Serumsample2$group[match(names(df_serum31),info_Serumsample2$MS_ID)]
+group0.sam= names(df_serum31)[grep("group0",group)]#19
+group2.sam= names(df_serum31)[grep("group2",group)]#32
+group1.sam= names(df_serum31)[grep("group1",group)] #112
+##合并P2/P3，time1-P1 vs P2/P3
+M4=df_serum31[apply(df_serum31[,group0.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+M4=M4[apply(M4[,group2.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+M4=M4[apply(M4[,group1.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+
+diff_2group <- linda.volcano.plot2(M4,logtransformation = F,group1 = names(M4)%in%c(group2.sam,group1.sam),group2 = names(M4)%in%group0.sam,label1 = "SerumTime1group12",label2 = "group0",fold_change = 2^0.25)
+length(diff_2group) #dw0:up10
+```
+
+
+```{r 同一时间点28d,57d也做group12 vs group0的差异筛选}
+#############################################################df_serum32
+group=info_Serumsample2$group[match(names(df_serum32),info_Serumsample2$MS_ID)]
+group0.sam= names(df_serum32)[grep("group0",group)]#19
+group2.sam= names(df_serum32)[grep("group2",group)]#32
+group1.sam= names(df_serum32)[grep("group1",group)] #112
+
+##合并P2/P3，time1-P1 vs P2/P3
+M4=df_serum32[apply(df_serum32[,group0.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+M4=M4[apply(M4[,group2.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+M4=M4[apply(M4[,group1.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+
+diff_time2 <- linda.volcano.plot2(M4,logtransformation = F,group1 = names(M4)%in%c(group2.sam,group1.sam),group2 = names(M4)%in%group0.sam,label1 = "SerumTime2group12",label2 = "group0",fold_change = 2^0.25) #4个
+
+#############################################################df_serum33
+group=info_Serumsample2$group[match(names(df_serum33),info_Serumsample2$MS_ID)]
+group0.sam= names(df_serum33)[grep("group0",group)]#19
+group2.sam= names(df_serum33)[grep("group2",group)]#32
+group1.sam= names(df_serum33)[grep("group1",group)] #112
+
+##合并P2/P3，time1-P1 vs P2/P3
+M4=df_serum33[apply(df_serum33[,group0.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+M4=M4[apply(M4[,group2.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+M4=M4[apply(M4[,group1.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+
+diff_time3 <- linda.volcano.plot2(M4,logtransformation = F,group1 = names(M4)%in%c(group2.sam,group1.sam),group2 = names(M4)%in%group0.sam,label1 = "SerumTime3group12",label2 = "group0",fold_change = 2^0.25) #2个
+```
+
+
+
+```{r 0d的三类病人样本去掉验证集再t-test 机器学习特征筛选20210930}
+#################################################df_Serum31 time1-Ttest#############################################################
+info_0d <- info_Serumsample2[info_Serumsample2$MS_ID%in%names(df_serum31),]
+second.info <- read_excel("../two_163data_0918.xlsx")
+second.info <- second.info[apply(second.info, 1, function(x) {sum(!is.na(x))>0}),]
+info_0d$recruit <- second.info$`Recruitment date ee`[match(info_0d$Patient_number,second.info$`Sample number`)]
+
+matrix_serum31.training <- df_serum31[,info_0d$MS_ID[info_0d$recruit==1]] #26
+matrix_serum31.predict <- df_serum31[,info_0d$MS_ID[info_0d$recruit==2]] #137
+
+group=info_0d$group[match(names(matrix_serum31.training),info_0d$MS_ID)]
+group0.sam= names(matrix_serum31.training)[grep("group0",group)]#14
+group2.sam= names(matrix_serum31.training)[grep("group2",group)]#30
+group1.sam= names(matrix_serum31.training)[grep("group1",group)] #93
+
+##合并P2/P3，time1-P1 vs P2/P3
+M4=matrix_serum31.training[apply(matrix_serum31.training[,group0.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+M4=M4[apply(M4[,group2.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+M4=M4[apply(M4[,group1.sam],1,function(x) {sum(is.na(x))/length(x)<0.9}),]
+
+diff_2group <- linda.volcano.plot(M4,logtransformation = F,group1 = names(M4)%in%c(group2.sam,group1.sam),group2 = names(M4)%in%group0.sam,label1 = "SerumTime1group12",label2 = "group0.new0930",fold_change = 2^0.25)
+length(diff_2group) #dw0:up4 "P0DJI8_SAA1"   "Q01518_CAP1"   "P50395_GDI2"   "Q2WGJ9_FER1L6"
+
+
+feature = diff_2group
+
+write.csv(df_serum31,"df_serum31.csv") #alldata
+write.csv(matrix_serum31.training[feature,],"df_serum31_4feature210930.csv") #traingdata
+write.csv(matrix_serum31.predict[feature,],"serum.predict_4feature210930.csv")
+write.csv(info_0d,"info_0d.serum.csv")
+
+####P1/P2/P3两两比较
+M1=M4[,c(group1.sam,group0.sam)]
+#time1-P1/P2
+linda.volcano.plot(M1,logtransformation = F,group1 =names(M1)%in%group1.sam ,group2 = names(M1)%in%group0.sam,label1 = "SerumTime1group1",label2 = "group0.new0930",fold_change = 2^0.25)  #dw：up 1:0
+
+M2=M4[,c(group2.sam,group0.sam)]
+#time1-P1/P3
+linda.volcano.plot(M2,logtransformation = F,group1 = names(M2)%in%group2.sam,group2 = names(M2)%in%group0.sam,label1 = "SerumTime1group2",label2 = "group0.new0930",fold_change = 2^0.25) #0
+#time1-P2/P3
+M3=M4[,c(group2.sam,group1.sam)]
+linda.volcano.plot(M3,logtransformation = F,group1 = names(M3)%in%group2.sam,group2 = names(M3)%in%group1.sam,label1 = "SerumTime1group2",label2 = "group1.new0930",fold_change = 2^0.25) #0
+
+#time1-anova
+linda.annova2(M4,label = info_0d$group[match(names(M4),info_0d$MS_ID)],adjust.p = F,title = "Serumtime1_3groupDiff.new093")
+```
+
+
+#Fig S4
+```{r annova1:比较同一时间点不同group样本}
+#time1-anova
+linda.annova2(df_serum31,label = info_Serumsample2$group[match(names(df_serum31),info_Serumsample2$MS_ID)],adjust.p = F,title = "Serumtime1_3grouppatient")
+#time2-anova
+linda.annova2(df_serum32,label = info_Serumsample2$group[match(names(df_serum32),info_Serumsample2$MS_ID)],adjust.p = F,title = "Serumtime2_3grouppatient")
+#time3-anova
+linda.annova2(df_serum33,label = info_Serumsample2$group[match(names(df_serum33),info_Serumsample2$MS_ID)],adjust.p = F,title = "Serumtime3_3grouppatient")
+
+table(info_Serumsample2$group[match(names(df_serum31),info_Serumsample2$MS_ID)])# group0 group1 group2 19    112     32 
+
+#For 3group
+differprot1 <- read.csv("./Serumtime1_3grouppatient_differprot_pvalue0.05.csv")
+differprot1=differprot1[!is.na(differprot1$pvalue),] #69 Adjust:1个
+
+differprot2 <- read.csv("./Serumtime2_3grouppatient_differprot_pvalue0.05.csv")
+differprot2=differprot2[!is.na(differprot2$pvalue),] #31
+
+differprot3 <- read.csv("./Serumtime3_3grouppatient_differprot_pvalue0.05.csv")
+differprot3=differprot3[!is.na(differprot3$pvalue),] #39
+
+####FigS4:
+heatmap.data=df_serum3[unique(c(differprot1$X,differprot2$X,differprot3$X)),]#129
+heatmap.data[is.na(heatmap.data)]=0
+testdata=data.frame(group=info_Serumsample2$group[match(names(heatmap.data),info_Serumsample2$MS_ID)],time=info_Serumsample2$TIME[match(names(heatmap.data),info_Serumsample2$MS_ID)],t(heatmap.data))
+testdata= aggregate(testdata[,-c(1,2)],by = list(testdata$group,testdata$time),mean)
+anncol <- data.frame(testdata[,c(1,2)])
+testdata= data.frame(t(testdata[,-c(1,2)]))
+names(testdata)=paste0("sample",1:9)
+row.names(anncol)=names(testdata)
+
+anncol=data.frame(anncol[order(anncol$Group.1),])
+names(anncol)=c("group","time")
+testdata=testdata[,row.names(anncol)]
+ #0.000太多
+pheatmap(testdata,
+         fontsize = 5,
+         fontsize_col = 7,
+         color = c(brewer.pal(11,"RdYlBu")[11:7],"azure1",brewer.pal(11,"RdYlBu")[5:1]),
+         annotation_col = anncol,
+         scale = "row",
+         cluster_rows = T,
+         cluster_cols =F,
+         show_rownames = T,
+         show_colnames = F,
+         cellwidth = 5,
+         cellheight = 5,
+         filename = "MeandiffSerum_ALLtimepatient.pdf",
+         main = ""
+        )
+```
+
+FigS5   
+```{r mfuzz：同一group三个时间点病人样本}
+
+df_serum41=df_serum3[,na.omit(info_Serumsample2$MS_ID[info_Serumsample2$group=="group0"])]
+df_serum42=df_serum3[,na.omit(info_Serumsample2$MS_ID[info_Serumsample2$group=="group2"])]
+df_serum43=df_serum3[,na.omit(info_Serumsample2$MS_ID[info_Serumsample2$group=="group1"])]
+
+data=df_serum41
+names(data) = info_Serumsample2$TIME[match(names(df_serum41),info_Serumsample2$MS_ID)]
+df.mfu <- aggregate(t(df_serum41),by = list(names(data)),mean,na.rm=T)
+df.mfu2 <- data.frame(t(df.mfu[,-1]))
+names(df.mfu2) <- df.mfu[,1]
+set.seed(10)
+a <- ge.mfuzz.cselection(df.mfu2,seq(2,12,2))
+ge.mfuzz.getresult(a,12,names(df.mfu2),"Group0sample.mfuzz")
+
+data=df_serum43
+names(data) = info_Serumsample2$TIME[match(names(df_serum43),info_Serumsample2$MS_ID)]
+df.mfu <- aggregate(t(df_serum43),by = list(names(data)),mean,na.rm=T)
+df.mfu2 <- data.frame(t(df.mfu[,-1]))
+names(df.mfu2) <- df.mfu[,1]
+set.seed(10)
+a <- ge.mfuzz.cselection(df.mfu2,seq(2,12,2))
+ge.mfuzz.getresult(a,12,names(df.mfu2),"Group1sample.mfuzz")
+
+data=df_serum42
+names(data) = info_Serumsample2$TIME[match(names(df_serum42),info_Serumsample2$MS_ID)]
+df.mfu <- aggregate(t(df_serum42),by = list(names(data)),mean,na.rm=T)
+df.mfu2 <- data.frame(t(df.mfu[,-1]))
+names(df.mfu2) <- df.mfu[,1]
+set.seed(10)
+a <- ge.mfuzz.cselection(df.mfu2,seq(2,12,2))
+ge.mfuzz.getresult(a,12,names(df.mfu2),"Group2sample.mfuzz")
+```
+
+FigS4热图 : fIG6c:Pie图
+```{r group12-group0的3个time差异蛋白合并heatmap}
+d1 <- read.csv("./SerumTime1group12_group0_all_volcano.csv",row.names = 1)
+d11 <- d1[abs(d1$log2.foldchange.)>0.25 & d1$P_value_adjust <0.05,]
+#d11 <- d1[abs(d1$log2.foldchange.)>0.25 & d1$P_value<0.05,]
+d2 <- read.csv("./SerumTime2group12_group0_all_volcano.csv",row.names = 1)
+d22 <- d2[abs(d2$log2.foldchange.)>0.25 & d2$P_value_adjust <0.05,]
+#d22 <- d2[abs(d2$log2.foldchange.)>0.25 & d2$P_value <0.05,]
+d3 <- read.csv("./SerumTime3group12_group0_all_volcano.csv",row.names = 1)
+d33 <- d3[abs(d3$log2.foldchange.)>0.25 & d3$P_value_adjust <0.05,]
+#d33 <- d3[abs(d3$log2.foldchange.)>0.25 & d3$P_value <0.05,]
+mergeSerum <- rbind(d11[,c("log2.foldchange.","P_value","P_value_adjust")],d22[,c("log2.foldchange.","P_value","P_value_adjust")],d33[,c("log2.foldchange.","P_value","P_value_adjust")])
+mergeSerum$group <- c(rep("Time1group12_group0",nrow(d11)),rep("Time2group12_group0",nrow(d22)),rep("Time3group12_group0",nrow(d33)))
+write.csv(mergeSerum,"mergeSerum.csv")
+# ov.prots <- intersect(linda.split(row.names(mergeSerum)),linda.split(row.names(mergePBMC)))
+# write.csv(ov.prots,"PBMC_serum_overlap.csv")
+
+#heatmap.data=df_serum3[unique(c(row.names(d11),row.names(d22),row.names(d33))),]
+heatmap.data=df_serum3[unique(c(row.names(d11),row.names(d22),row.names(d33))),
+                      c(names(d11),names(d22),names(d33))[!c(names(d11),names(d22),names(d33))%in%c("log2.foldchange.","P_value","P_value_adjust")]]
+
+df_serum3_delrep=df_serum3[,c(names(d11),names(d22),names(d33))[!c(names(d11),names(d22),names(d33))%in%c("log2.foldchange.","P_value","P_value_adjust")]]
+write.csv(df_serum3_delrep,"df_serum3_delrep.csv")
+
+anncol=data.frame(group=info_Serumsample2$group[match(names(heatmap.data),info_Serumsample2$MS_ID)]
+                  ,label=info_Serumsample2$TIME[match(names(heatmap.data),info_Serumsample2$MS_ID)],
+                  row.names = names(heatmap.data))
+
+anncol=data.frame(anncol[order(anncol$group),])
+
+anncol$group <- gsub("group1|group2","group12",anncol$group)
+
+centermatrix <- heatmap.data[,row.names(anncol)]
+names(centermatrix) <- paste0(anncol$label,"_",anncol$group)
+
+m1  <- data.frame(type=names(centermatrix),t(centermatrix))
+
+##按照每个时间点的group求平均
+m1 <- aggregate(m1[,-1],by = list(m1$type),mean,na.rm=T)
+centermatrix2 <- t(data.frame(m1[,-1],row.names = m1$Group.1))
+
+anncol2 <- data.frame(
+                  group=rep(c("group0","group12"),3),
+                  time=rep(c("time1","time2","time3"),each=2),
+                  row.names = unlist(dimnames(centermatrix2)[2]))
+anncol2 <- anncol2[order(anncol2$time),]
+
+pdata <- pheatmap(centermatrix2[,row.names(anncol2)],
+         fontsize = 7,
+         color = c(brewer.pal(11,"RdYlBu")[11:7],"azure1",brewer.pal(11,"RdYlBu")[5:1]),
+         annotation_col = anncol2,
+        # annotation_row = pathway,
+         scale = "row",
+         cluster_rows = T,
+         cluster_cols =F,
+         show_rownames = T,
+         show_colnames = F,
+         filename = "AlldiffSerum.meanV1_group12-group0_renew.pdf",
+        # filename = "AlldiffSerum_pavlue0.05.meanV1_group12-group0_renew.pdf",
+         main = ""
+        )
+
+ heatmap.prots <- row.names(centermatrix2)[pdata$tree_row[["order"]]]
+write.csv(heatmap.prots,"heatmap.prots.csv")
+
+##############################
+node <- read.csv("./serum_FINAL_MCODE_ALL_PPIColorByCounts default node.csv")
+gene_symbol <- unlist(lapply(row.names(df_serum), function(x) {str_split(x,"_")[[1]][2]}))
+gene_symbol[grep("ATP5B|ATP5A1",gene_symbol)] <- c("ATP5F1B","ATP5F1A")
+prot <- row.names(df_serum)[match(node$Symbol,gene_symbol)]
+
+heatmap.data=df_serum3[prot,]
+
+
+anncol=data.frame(group=info_Serumsample2$group[match(names(heatmap.data),info_Serumsample2$MS_ID)]
+                  ,label=info_Serumsample2$TIME[match(names(heatmap.data),info_Serumsample2$MS_ID)],
+                  row.names = names(heatmap.data))
+
+anncol=data.frame(anncol[order(anncol$group),])
+
+anncol$group <- gsub("group1|group2","group12",anncol$group)
+
+centermatrix <- heatmap.data[,row.names(anncol)]
+names(centermatrix) <- paste0(anncol$label,"_",anncol$group)
+
+m1  <- data.frame(type=names(centermatrix),t(centermatrix))
+
+##按照每个时间点的group求平均
+m1 <- aggregate(m1[,-1],by = list(m1$type),mean,na.rm=T)
+centermatrix2 <- t(data.frame(m1[,-1],row.names = m1$Group.1))
+
+anncol2 <- data.frame(
+                  group=rep(c("group0","group12"),3),
+                  time=rep(c("time1","time2","time3"),each=2),
+                  row.names = unlist(dimnames(centermatrix2)[2]))
+
+pheatmap(centermatrix2,
+         color = c(brewer.pal(11,"RdYlBu")[11:7],"azure1",brewer.pal(11,"RdYlBu")[5:1]),
+         annotation_col = anncol2,
+         scale = "row",
+         cluster_rows = T,
+         cluster_cols =F,
+         show_rownames = T,
+         show_colnames = F,
+         filename = "Serumnodeprots.mean_group12-group0.pdf",
+         main = "",height = 9
+        )
+
+####MCODE_CLUSTER_ID 为1，3, 4,5,8 画扇形6等分
+node_piegene <- node$Symbol[which(node$MCODE_CLUSTER_ID==1|node$MCODE_CLUSTER_ID==3|node$MCODE_CLUSTER_ID==4|node$MCODE_CLUSTER_ID==5|node$MCODE_CLUSTER_ID==8)] #45gene
+data.node <- centermatrix2[row.names(df_serum)[match(node_piegene,gene_symbol)],]
+##批量画pie
+dir.create("rose_pie")
+
+p <- list()
+for (i in 1:nrow(data.node)) {
+  data_rose = data.frame(data.node[i,])
+colnames(data_rose) <- row.names(data.node)[i]
+data_rose$group <- row.names(data_rose)
+order_group = c("time1_group0","time2_group0","time3_group0","time3_group12","time2_group12","time1_group12")
+data_rose <- data_rose[order_group,]
+data_rose$group <- factor(x = data_rose$group,levels =  data_rose$group)
+
+data_rose$label = c(rep("group0",3),rep("group12",3))
+data_rose$name = c(c("0d","28d","57d"),c("57d","28d","0d"))
+
+p[[i]] <- ggplot(data_rose, aes(group, get(row.names(data.node)[i]),fill = label)) +
+  geom_col(width = 1, size=0.8,#bar的边框线粗细
+           color="black") + #画bar 
+  geom_hline(aes(yintercept = max(data_rose[,1],na.rm = T)),size=0.8)+ #外圈园半径是最大值
+  geom_col(aes(y = 0.2*min(data_rose[,1],na.rm = T)), width = 1, color = 'white', fill = 'white') + #内圈空心园
+   scale_fill_manual(values = c("#377EB8","#FF7F00")) + #颜色填充，注意颜色按对数映射
+  coord_polar(direction=-1)+#极坐标转换，逆时针排序
+  theme_void() +
+  theme(legend.position = "none")
+ggsave(paste0("rose_pie/",row.names(data.node)[i],"_rose.pdf"),plot = p[[i]],height = 5,width = 5,device = NULL)  
+}
+```
+
+
+```{r boxplot-machine learning的feature}
+info_Serumsample2 <- read.csv(".//info_Serumsample.csv",row.names = 1)
+df_serum <- read.csv(".//df_serum3.csv",row.names = 1)
+
+feature <- read.csv("./score_and_feature_Serum.csv",row.names = 1)
+valiprot_matrix <- data.frame(t(df_serum3[names(feature),]),
+                              time=info_Serumsample2$TIME[match(names(df_serum3),info_Serumsample2$MS_ID)],
+                              group=info_Serumsample2$group[match(names(df_serum3),info_Serumsample2$MS_ID)])
+
+valiprot_matrix$group <- gsub("group1|group2","group12",valiprot_matrix$group)
+
+boxdata <-  melt(valiprot_matrix,measure.vars = names(valiprot_matrix)[!grepl("time|group",names(valiprot_matrix))],variable.name = "protein",value.name = "intensity")
+
+boxdata$type <- paste0(boxdata$time,"_",boxdata$group)
+
+my_comparisons <- list(c("time1_group0","time1_group12"),c("time2_group0","time2_group12"),c("time3_group0","time3_group12"))
+
+for (i in unique(boxdata$protein)) {
+  data=boxdata[boxdata$protein==i,]
+  p <- ggboxplot(data, x = "type", y = "intensity",
+                 #color = "Type",
+                 fill = "group",width = 0.3,
+                 size =0.5,
+                 outlier.shape = 19
+                 
+  )+
+    scale_fill_manual(values = c("#377EB8","#FF7F00"))+
+   scale_x_discrete(limits=c("time1_group0","time1_group12","time2_group0","time2_group12","time3_group0","time3_group12"))+
+    scale_y_log10()+
+    labs(title = i)+
+    stat_compare_means(comparisons = my_comparisons,
+                       hide.ns = F,label="p.signif",
+                       method = "t.test"
+    )+
+    theme(axis.text = element_text(size = 12,colour = "black"),
+        text = element_text(size = 10,colour = "black"),#调整label text的字体大小
+        axis.title.x = element_text(size = 15,colour = "black")
+  )+
+  theme(axis.text.x = element_text(hjust = 1,angle = 45))
+  
+  ggsave(paste0(i,"_boxplot.pdf"),plot = p,width =4,height = 4)
+}
+```
+
+
+```{r 预测180天有无抗体的特征筛选：180d有无抗体的t-test（用28d/57d的group12样本且去掉批次2的26个病人（验证集），180d的有无抗体作为label}
+#############57d
+info_57d <- info_Serumsample2[info_Serumsample2$MS_ID%in%names(df_serum33),]#163
+info_57d$recruit <- second.info$`Recruitment date ee`[match(info_57d$Patient_number,second.info$`Sample number`)]
+info_57d$`180d-anti` <- second.info$`Seroconversion of Nab j , (180d)` [match(info_57d$Patient_number,second.info$`Sample number`)]
+
+mat <- df_serum33[,info_57d$MS_ID[info_57d$recruit==1]] #137 去掉批次2的26个病人
+
+mat2 <- mat[,!names(mat)%in%info_57d$MS_ID[info_57d$group=="group0"]] #123samples 去掉group0的样本
+
+mat3 <- data.frame(t(mat2))
+
+mat3$label <- info_57d$`180d-anti`[match(row.names(mat3),info_57d$MS_ID)]
+
+mat4 <- mat3[!is.na(mat3$label),] #107samples,删掉180天没label的样本
+
+table(mat4$label) #77:30
+
+mat5 <- data.frame(t(mat4[,-grep("label",names(mat4))]))
+
+NA_threshold_table(mat5)
+mat41 <- mat5[apply(mat5, 1, function(x) {(sum(is.na(x))/length(x)) <0.9}),] #941prots*107samples
+
+write.csv(mat4,"Serum_180dfeature_57dsamTtest.rawmat.csv")
+
+DIFFPROTS0 <- linda.volcano.plot2(mat41,logtransformation = F,group1 = grep("1",mat4$label),group2 = grep("0",mat4$label),label1 = "Serum_180dGroup4_57d_response1",label2 = "Group3_response0",P.adjust = F,fold_change = 2^0.25)
+
+#############两类病人在57d的蛋白与0d的蛋白变化的比值差异
+##57d的矩阵
+matrix_57d <- mat41 #941prots*107samples
+
+#0d的矩阵
+info_0d <- info_Serumsample2[info_Serumsample2$MS_ID%in%names(df_serum31),]#163
+info_0d$recruit <- second.info$`Recruitment date ee`[match(info_0d$Patient_number,second.info$`Sample number`)]
+info_0d$`180d-anti` <- second.info$`Seroconversion of Nab j , (180d)` [match(info_0d$Patient_number,second.info$`Sample number`)]
+
+mat <- df_serum31[,info_0d$MS_ID[info_0d$recruit==1]] #137 去掉批次2的26个病人
+
+mat2 <- mat[,!names(mat)%in%info_0d$MS_ID[info_0d$group=="group0"]] #123samples 去掉group0的样本
+
+mat3 <- data.frame(t(mat2))
+
+mat3$label <- info_0d$`180d-anti`[match(row.names(mat3),info_0d$MS_ID)]
+
+mat4 <- mat3[!is.na(mat3$label),] #107samples,删掉180天没label的样本
+
+table(mat4$label) #77:30
+
+mat5 <- data.frame(t(mat4[,-grep("label",names(mat4))]))
+
+mat41 <- mat5[apply(mat5, 1, function(x) {(sum(is.na(x))/length(x)) <0.9}),] #947prots*107samples
+
+matrix_0d <- mat41[intersect(row.names(matrix_57d),row.names(mat41)),]#932prots*107samples
+matrix_57d_1 <- matrix_57d[row.names(matrix_0d),] 
+
+identical(info_Serumsample2$Patient_number[match(names(matrix_57d_1),info_Serumsample2$MS_ID)],
+          info_Serumsample2$Patient_number[match(names(matrix_0d),info_Serumsample2$MS_ID)])
+identical(row.names(matrix_57d_1),row.names(matrix_0d))
+
+rate <- matrix_57d_1/matrix_0d
+names(rate) <- paste0("P",info_Serumsample2$Patient_number[match(names(matrix_57d_1),info_Serumsample2$MS_ID)])
+
+O1 <- fivenum(rate)[4]+2*IQR(as.numeric(unlist(rate)),na.rm = T)
+O2 <- fivenum(rate)[2]-2*IQR(as.numeric(unlist(rate)),na.rm = T)
+
+rate[rate>O1]=O1
+rate[rate<O2]=O2
+
+antilabel <- info_57d$`180d-anti`[match(names(matrix_57d_1),info_57d$MS_ID)]
+
+DIFFPROTS0 <- linda.volcano.plot2(rate,logtransformation = T,group1 = grep("1",antilabel),group2 = grep("0",antilabel),label1 = "Serum_180dGroup4_57-0rate_response1",label2 = "Group3_response0",P.adjust = F,fold_change = 2^0.25)
+```
+
+
+```{r pie}
+info_Serumsample2 <- read.csv(".//info_Serumsample.csv",row.names = 1)
+df_serum <- read.csv("./df_serum0.9.csv",row.names = 1)
+
+info_Serumsample2$`180d-anti` <- second.info$`Seroconversion of Nab j , (180d)` [match(info_Serumsample2$Patient_number,second.info$`Sample number`)]
+
+info_Serumsample2$`180d-antigroup` <- ifelse(!is.na(info_Serumsample2$`180d-anti`),paste0("Group",info_Serumsample2$`180d-anti`),NA)
+info_Serumsample2$`180d-antigroup` <- gsub("Group0","Group3",info_Serumsample2$`180d-antigroup`)
+info_Serumsample2$`180d-antigroup` <- gsub("Group1","Group4",info_Serumsample2$`180d-antigroup`)  
+
+info_Serumsample2$recruit <- second.info$`Recruitment date ee`[match(info_Serumsample2$Patient_number,second.info$`Sample number`)]
+
+write.csv(info_Serumsample2,"info_Serumsample2_latest.csv")
+
+df_serum3 <- read.csv("./df_serum3.csv",row.names = 1)
+info_Serumsample2 <- read.csv("./info_Serumsample2_latest.csv",row.names = 1)
+
+gene_group120 <- read.csv("../PBMC_serum_all_69_adjp(1).csv",row.names = 1)
+gene_group120 <- gene_group120[gene_group120$sample=="serum",]
+data.node0 <- df_serum3[match(gene_group120$DEPs,linda.split(row.names(df_serum3),character_pos = 1)),]
+
+heatmap.data <- data.node0
+
+anncol=data.frame(group=info_Serumsample2$group[match(names(heatmap.data),info_Serumsample2$MS_ID)]
+                  ,label=info_Serumsample2$TIME[match(names(heatmap.data),info_Serumsample2$MS_ID)],
+                  row.names = names(heatmap.data))
+
+anncol=data.frame(anncol[order(anncol$group),])
+
+anncol$group <- gsub("group1|group2","group12",anncol$group)
+
+centermatrix <- heatmap.data[,row.names(anncol)]
+names(centermatrix) <- paste0(anncol$label,"_",anncol$group)
+
+m1  <- data.frame(type=names(centermatrix),t(centermatrix))
+
+##按照每个时间点的group求平均
+m1 <- aggregate(m1[,-1],by = list(m1$type),mean,na.rm=T)
+centermatrix2 <- t(data.frame(m1[,-1],row.names = m1$Group.1))
+data.node <- centermatrix2
+##批量画pie
+p <- list()
+for (i in 1:nrow(data.node)) {
+  data_rose = data.frame(data.node[i,])
+colnames(data_rose) <- row.names(data.node)[i]
+data_rose$group <- row.names(data_rose)
+order_group = c("time1_group0","time2_group0","time3_group0","time3_group12","time2_group12","time1_group12")
+data_rose <- data_rose[order_group,]
+data_rose$group <- factor(x = data_rose$group,levels =  data_rose$group)
+
+data_rose$label = c(rep("group0",3),rep("group12",3))
+data_rose$name = c(c("0d","28d","57d"),c("57d","28d","0d"))
+
+p[[i]] <- ggplot(data_rose, aes(group, get(row.names(data.node)[i]),fill = label)) +
+  geom_col(width = 1, size=0.8,#bar的边框线粗细
+           color="black") + #画bar 
+  #geom_col(aes(y = max(data_rose$P49913_CAMP,na.rm = T)),width = 1, alpha = 0.1, color="black",fill = 'white',size = 0) + #人为加外圈园
+  geom_hline(aes(yintercept = max(data_rose[,1],na.rm = T)),size=0.8)+ #外圈园半径是最大值
+  geom_col(aes(y = 0.2*min(data_rose[,1],na.rm = T)), width = 1, color = 'white', fill = 'white') + #内圈空心园
+   scale_fill_manual(values = c("#377EB8","#FF7F00")) +
+  coord_polar(direction=-1)+#极坐标转换，逆时针排序
+  theme_void() +
+  theme(legend.position = "none")
+ggsave(paste0(row.names(data.node)[i],"_roseSerumgroup12+0.pdf"),plot = p[[i]],height = 5,width = 5,device = NULL)  
+}
+```
+
+
+```{r QC补充PCA}
+info_Serumsample2 <- read.csv("./info_Serumsample2_latest.csv")
+df_serumS <- read.csv("./df_serum0.9.csv",row.names = 1)
+df_serumS<-df_serumS[,!names(df_serumS)%in%c("S18_4","S18_5","S18_6")]
+
+# set.seed(123)
+ge.plot.pca(df_serumS,type = str_extract(names(df_serumS),"S[0-9 ]*"),title="Serum.QC_PCAgroup120",ptColors=ge.color(length(unique(str_extract(names(df_serumS),"S[0-9]*")))))
+
+ge.plot.pca(df_serumS,type = info_Serumsample2$group[match(names(df_serumS),info_Serumsample2$MS_ID)],ptColors = c("#87CEFA","#F4A460","#8B4513" ),title = "QC_PCAgroup120")
+ncol(df_serumS)
+df_serumgroup34 <- df_serumS[,na.omit(info_Serumsample2$MS_ID[info_Serumsample2$group!="group0"])]
+df_serumgroup34 <- df_serumgroup34[,!is.na(info_Serumsample2$X180d.antigroup[match(names(df_serumgroup34),info_Serumsample2$MS_ID)])]
+# set.seed(123)
+ge.plot.pca(df_serumgroup34,type = info_Serumsample2$X180d.antigroup[match(names(df_serumgroup34),info_Serumsample2$MS_ID)],ptColors = c("#808080","#FF6347"),title = "QC_PCAgroup34")
+ncol(df_serumgroup34)
+```
+
+
