@@ -1,0 +1,286 @@
+```{r pool data}
+rm(list = ls())
+source("D:/datamining_library_ge.R")
+df <- read.csv("./20210715CVDHZ_abundance.csv",row.names=1)
+NA_threshold_table(df)
+df_pool<- df[,grepl("pool",names(df))]
+# batch1 <- ge.split(names(df_pool),"_",1) 
+# batch1 <-names(df_pool) 
+# write.csv(df_pool,"pool.csv")
+
+df_pool <- df_pool[apply(df_pool,1, function(x){sum(is.na(x))/ncol(df_pool)})<0.9,]
+ge.na.ratio(df_pool)
+batch1 <-names(df_pool) 
+
+df_pool.matrix <- as.matrix(df_pool)
+outlier <-
+  (fivenum(df_pool.matrix)[4] - fivenum(df_pool.matrix)[2]) * 2 + fivenum(df_pool.matrix)[4]
+df_pool[df_pool > outlier] <- outlier
+ge.plot.density(df_pool)
+
+
+sum.cv <-  apply(df_pool, 1 , function(x) {
+        sd(x,na.rm = T) / mean(x,na.rm = T)
+      })
+median=sprintf("%0.4f",median(sum.cv,na.rm=T))
+    df.cv <-
+      data.frame(cv = sum.cv, sample = factor(rep("all", each = nrow(df_pool))))
+    p <-
+      ggplot(df.cv, aes(
+        x = sample,
+        y = cv,
+        color = sample,
+        group = sample
+      )) +
+      scale_color_manual(values=c("#00bFC4"))+
+      geom_violin(trim = FALSE) +
+      geom_boxplot(width = 0.1) +
+      geom_text(aes(0.8,1.5,label = paste0( "median=",median)))+
+      theme(
+        legend.direction = 'horizontal',
+        legend.position = 'top',
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black")
+      ) +
+      theme(
+        axis.text = element_text(size = 15, colour = "black"),
+        text = element_text(size = 15, colour = "black")
+      ) +
+      # theme(axis.text.x = element_text(hjust = 1, angle = 45)) +
+      theme(legend.position = "none")
+    
+    ggsave(
+      paste0("pool_CV.pdf"),
+      plot = p ,
+      device = NULL,
+      width = 5,
+      height = 5
+    )
+write.csv(sum.cv,"poolcv.csv")
+```
+
+
+```{r}
+source("D:/datamining_library_ge.R")
+df <- read.csv("./20210803CVDHZ_protmatrix_serum.csv",row.names=1)
+
+df <- df[!apply(df,1, function(x){all(is.na(x))}),]
+ge.na.ratio(df)
+
+df_pool<- df[,grepl("pool",names(df))]
+colnames(df_pool) <- gsub("X.", "", colnames(df_pool))
+
+NA_threshold_table(df_pool)
+
+df_pool <- df_pool[apply(df_pool,1, function(x){sum(is.na(x))/ncol(df_pool)})<0.9,]
+ge.na.ratio(df_pool)
+batch1 <-names(df_pool) 
+
+df_pool.matrix <- as.matrix(df_pool)
+outlier <-
+  (fivenum(df_pool.matrix)[4] - fivenum(df_pool.matrix)[2]) * 2 + fivenum(df_pool.matrix)[4]
+df_pool[df_pool > outlier] <- outlier
+ge.plot.density(df_pool)
+
+
+sum.cv <-  apply(df_pool, 1 , function(x) {
+        sd(x,na.rm = T) / mean(x,na.rm = T)
+      })
+median=sprintf("%0.4f",median(sum.cv,na.rm=T))
+    df.cv <-
+      data.frame(cv = sum.cv, sample = factor(rep("pool", each = nrow(df_pool))))
+    p <-
+      ggplot(df.cv, aes(
+        x = sample,
+        y = cv,
+        color = sample,
+        group = sample
+      )) +
+      geom_violin(trim = FALSE) +
+      geom_boxplot(width = 0.1) +
+      geom_text(aes(0.8,1.5,label = paste0( "median=",median)))+
+      theme(
+        legend.direction = 'horizontal',
+        legend.position = 'top',
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black")
+      ) +
+      theme(
+        axis.text = element_text(size = 15, colour = "black"),
+        text = element_text(size = 15, colour = "black")
+      ) +
+      # theme(axis.text.x = element_text(hjust = 1, angle = 45)) +
+      theme(legend.position = "none")
+    
+    ggsave(
+      paste0("pool_CV_na902.pdf"),
+      plot = p ,
+      device = NULL,
+      width = 5,
+      height = 5
+    )
+write.csv(sum.cv,"poolcv_na902.csv")
+
+
+```
+```{r T}
+rm(list = ls())
+library(readr)
+library(DMwR2)
+library(openxlsx)
+source("D:/datamining_library_ge.R")
+
+df1 <- read.csv("./20210803CVDHZ_protmatrix_serum.csv",row.names=1)
+df1<-df1[,!grepl("pool",names(df1))]
+colnames(df1) <- gsub("X.", "", colnames(df1))
+
+ge.na.ratio(df1)
+max(df1)
+
+NA_threshold_table(df1)
+df1 <- df1[apply(df1,1, function(x){sum(is.na(x))/ncol(df1)})<0.9,]
+name<-rownames(df1)
+df1=as.data.frame(lapply(df1,as.numeric))
+ge.plot.density(df1)
+df1.matrix <- as.matrix(df1)
+outlier <-
+  (fivenum(df1.matrix)[4] - fivenum(df1.matrix)[2]) * 2 + fivenum(df1.matrix)[4]
+df1[df1 > outlier] <- outlier
+ge.plot.density(df1)
+rownames(df1)<-name
+
+batch <- ge.split(names(df1),"_",1) 
+batch1 <- batch[!duplicated(batch)]
+```
+
+
+```{r}
+id <- read.csv("./CVDHZ_serum_MS_info0722.csv")
+id.rep<- id$SampleID[match(colnames(df1),id$MS_ID)]
+df2<-df1
+colnames(df2)<-id.rep
+rownames(df2)<-name
+rep <- names(df2)[grepl("_rep", names(df2))]
+
+# df2[is.na(df2)]<- min(df2,na.rm = T)*0.8
+
+df.cor <- c()
+for (i in rep) {
+  repa <- str_split(i,"_rep")[[1]][1]
+  df.r <- df2[,which(names(df2) %in% c(repa,i))]
+  # df.r[is.na(df.r)] <- 0
+  # new_mean <- apply(df1, 1, function(x){ifelse(sum(is.na(x))==ncol(df1),NA, mean(as.numeric(x),na.rm=T))} )
+    cor1 <- as.numeric(df.r[,1])
+    cor2 <- as.numeric(df.r[,2])
+    r <- cor(cor1, cor2, use = "pairwise.complete.obs")   
+    df.cor <- rbind(df.cor,c(repa,r))
+}
+
+
+df11 <- read.csv("./20210715CVDHZ_abundance.csv",row.names=1)
+NA_threshold_table(df11)
+df11<-df11[,!grepl("pool",names(df11))]
+df11 <- df11[apply(df11,1, function(x){sum(is.na(x))/ncol(df11)})<0.9,]
+
+ge.plot.density(df11)
+df1.matrix <- as.matrix(df11)
+outlier <-
+  (fivenum(df1.matrix)[4] - fivenum(df1.matrix)[2]) * 2 + fivenum(df1.matrix)[4]
+df11[df11 > outlier] <- outlier
+
+
+id <- read.xlsx("./CVDHZ_PBMC_MS_info0722.xlsx")
+id2.rep<- id$SampleID[match(colnames(df11),id$MS_ID)]
+df22<-df11
+colnames(df22)<-id2.rep
+
+repB <- names(df22)[grepl("_rep", names(df22))]
+
+df2.cor <- c()
+for (i in repB) {
+  repa <- str_split(i,"_rep")[[1]][1]
+  df.r <- df22[,which(names(df22) %in% c(repa,i))]
+  # df.r[is.na(df.r)] <- 0
+  # new_mean <- apply(df1, 1, function(x){ifelse(sum(is.na(x))==ncol(df1),NA, mean(as.numeric(x),na.rm=T))} )
+    cor1 <- as.numeric(df.r[,1])
+    cor2 <- as.numeric(df.r[,2])
+    r <- cor(cor1, cor2, use = "pairwise.complete.obs")   
+    df2.cor <- rbind(df2.cor,c(repa,r))
+}
+
+# df.cor  df2.cor
+df.cv <- data.frame(R=as.numeric(c(df2.cor[,2],df.cor[,2])),sample=c(rep("pbmc",each=14),rep("serum",each=3)))
+
+p<-ggplot(df.cv, aes(x = sample, y=R,color=sample)) + 
+  scale_y_continuous(limits = c(0,1.05),expand = c(0,0))+
+  scale_color_manual(values=c("#00bFC4","#F8766D"))+
+  geom_violin(trim=FALSE)+
+  scale_fill_manual(values=brewer.pal(12,"Set3")[c(1:10)])+
+  geom_boxplot(width=0.1)+
+  theme(legend.direction = 'horizontal',legend.position = 'top',panel.grid.major =element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(),axis.line = element_line(colour = "black"))+
+ 
+   theme(axis.text = element_text(size = 15,colour = "black"),text = element_text(size = 15,colour = "black"))+
+  theme(axis.text.x = element_text( hjust = 1,angle = 45))+
+  theme(legend.position = "none")
+ p<-p+annotate("text",x= 2,y=1,size= 4,label= paste0("median = ",round(median(as.numeric(df.cor[,2]),na.rm = T),4)))+annotate("text",x= 1,y=1,size= 4,label= paste0("median = ",round(median(as.numeric(df2.cor[,2]),na.rm = T),4)))
+ggsave("T_abundance2.pdf",plot =p ,device = NULL,width = 6, height = 6)
+
+```
+
+
+
+
+```{r PCA data}
+rm(list = ls())
+source("D:/datamining_library_ge.R")
+df_serum <- read.csv("./BatchFree2021-08-181_na.csv.csv",row.names = 1)
+df_serum <- df_serum[apply(df_serum, 1, function(x) {(sum(is.na(x))/length(x)) <0.9}),]
+
+#
+df_PBMC <- read.csv("./20210728CVDHZ_protmatrix_ratio_gene.csv",row.names = 1) 
+df_PBMC <- df_PBMC[apply(df_PBMC, 1, function(x) sum(!is.na(x))>0),]
+df_PBMCS=df_PBMC[apply(df_PBMC, 1, function(x) {(sum(is.na(x))/length(x)) <0.9}),]
+```
+
+
+```{r QC PCA}
+info_PBMCsample2 <- read.csv("./info_PBMCsample2_latest.csv")
+df_PBMCS <- read.csv("./df_PBMCS0.9.csv",row.names = 1)
+df_PBMCS <- df_PBMCS[,!names(df_PBMCS)%in%c("C18_4","C18_5","C18_6")]
+
+df_PBMCgroup34 <- df_PBMCS[,na.omit(info_PBMCsample2$MS_ID[info_PBMCsample2$group!="group0"])]
+df_PBMCgroup34 <- df_PBMCgroup34[,!is.na(info_PBMCsample2$X180d.antigroup[match(names(df_PBMCgroup34),info_PBMCsample2$MS_ID)])]
+
+batch <- ge.split(names(df_PBMCS),"_",1) 
+ # set.seed(10)
+ge.plot.pca(df_PBMCS,type = str_extract(names(df_PBMCS),"C[0-9]*"),title = "PBMC.QC_PCA.ALL",ptColors=ge.color(length(unique(batch))))
+
+ge.plot.pca(df_PBMCS,type = info_PBMCsample2$group[match(names(df_PBMCS),info_PBMCsample2$MS_ID)],ptColors = c("#87CEFA","#F4A460","#8B4513" ),title = "PBMC.QC_PCAgroup120")
+ge.plot.pca(df_PBMCgroup34,type = info_PBMCsample2$X180d.antigroup[match(names(df_PBMCgroup34),info_PBMCsample2$MS_ID)],ptColors = c("#808080","#FF6347"),title = "PBMC.QC_PCAgroup34")
+
+```
+
+
+```{r QC PCA}
+info_Serumsample2 <- read.csv("./info_Serumsample2_latest.csv")
+df_serumS <- read.csv("./df_serum0.9.csv",row.names = 1)
+df_serumS<-df_serumS[,!names(df_serumS)%in%c("S18_4","S18_5","S18_6")]
+
+batch <- ge.split(names(df_serumS),"_",1) 
+
+# set.seed(123)
+ge.plot.pca(df_serumS,type = str_extract(names(df_serumS),"S[0-9]*"),title="Serum.QC_PCA.ALL",ptColors=ge.color(length(unique(batch))))
+
+ge.plot.pca(df_serumS,type = info_Serumsample2$group[match(names(df_serumS),info_Serumsample2$MS_ID)],ptColors = c("#87CEFA","#F4A460","#8B4513" ),title = "Serum.QC_PCAgroup120")
+ncol(df_serumS)
+df_serumgroup34 <- df_serumS[,na.omit(info_Serumsample2$MS_ID[info_Serumsample2$group!="group0"])]
+df_serumgroup34 <- df_serumgroup34[,!is.na(info_Serumsample2$X180d.antigroup[match(names(df_serumgroup34),info_Serumsample2$MS_ID)])]
+# set.seed(123)
+ge.plot.pca(df_serumgroup34,type = info_Serumsample2$X180d.antigroup[match(names(df_serumgroup34),info_Serumsample2$MS_ID)],ptColors = c("#808080","#FF6347"),title = "Serum.QC_PCAgroup34")
+# ncol(df_serumgroup34)
+```
+
